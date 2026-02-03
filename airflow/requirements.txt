@@ -1,0 +1,4 @@
+duckdb==0.8.1
+pyarrow==11.0.0
+pandas
+requests

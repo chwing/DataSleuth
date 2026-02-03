@@ -7,32 +7,94 @@ services:
       POSTGRES_DB: airflow
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U airflow"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - airflow-network
 
-  airflow:
-    image: apache/airflow:2.8.1
+  airflow-init:
+    build: ./airflow
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
     volumes:
-      - ./airflow/dags:/opt/airflow/dags
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./data:/data
+      - ./warehouse:/warehouse
+    command: >
+      bash -c "airflow db migrate && 
+               airflow users create --username admin --password admin --firstname admin --lastname admin --role Admin --email admin@example.com || true"
+    networks:
+      - airflow-network
+
+  airflow-webserver:
+    build: ./airflow
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
     ports:
       - "8080:8080"
-    command: >
-      bash -c "
-      echo 'Waiting for Postgres...' &&
-      airflow db migrate &&
-      airflow users create --username admin --password admin --firstname admin --lastname admin --role Admin --email admin@example.com &&
-      exec airflow webserver
-      "
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./data:/data
+      - ./warehouse:/warehouse
+    command: webserver
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - airflow-network
+
+  airflow-scheduler:
+    build: ./airflow
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./data:/data
+      - ./warehouse:/warehouse
+    command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname $(hostname)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - airflow-network
 
 volumes:
   postgres_data:
+
+networks:
+  airflow-network:
+    driver: bridge
