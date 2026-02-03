@@ -25,15 +25,17 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: admin
+      _AIRFLOW_WWW_USER_PASSWORD: admin
     volumes:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
-      - ./data:/data
-      - ./warehouse:/warehouse
-    command: >
-      bash -c "airflow db migrate && 
-               airflow users create --username admin --password admin --firstname admin --lastname admin --role Admin --email admin@example.com || true"
+      - ./data:/opt/airflow/data
+      - ./warehouse:/opt/airflow/warehouse
+    command: version
     networks:
       - airflow-network
 
@@ -55,8 +57,8 @@ services:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
-      - ./data:/data
-      - ./warehouse:/warehouse
+      - ./data:/opt/airflow/data
+      - ./warehouse:/opt/airflow/warehouse
     command: webserver
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
@@ -81,8 +83,8 @@ services:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
-      - ./data:/data
-      - ./warehouse:/warehouse
+      - ./data:/opt/airflow/data
+      - ./warehouse:/opt/airflow/warehouse
     command: scheduler
     healthcheck:
       test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname $(hostname)"]
